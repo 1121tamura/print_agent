@@ -1,0 +1,22 @@
+# バイナリ
+print-agent.exe
+print-agent
+
+# 設定ファイル（実環境の config は含めない）
+configs/config.yaml
+
+# ビルド成果物
+dist/
+installer/output/
+
+# ログ・一時ファイル
+*.log
+tmp/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+Desktop.ini

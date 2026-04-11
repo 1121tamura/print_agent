@@ -1,0 +1,9 @@
+{
+  "name": "print-agent",
+  "image": "golang:1.24",
+  "customizations": {
+    "vscode": {
+      "extensions": ["golang.go"]
+    }
+  }
+}

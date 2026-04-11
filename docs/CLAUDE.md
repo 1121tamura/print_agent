@@ -93,9 +93,7 @@ agent_id・Backend URL・Redis接続先・temp_dir などはすべて YAML で�
 
 ```text
 print-agent/
-├─ cmd/
-│  └─ agent/
-│     └─ main.go
+├─ main.go
 ├─ internal/
 │  ├─ config/
 │  │  ├─ config.go
@@ -133,6 +131,7 @@ print-agent/
 │  ├─ CLAUDE.md
 │  ├─ api-contract.md
 │  └─ installer.md
+├─ main.go
 ├─ go.mod
 └─ README.md
 ```
@@ -141,7 +140,7 @@ print-agent/
 
 # 各ディレクトリの役割
 
-## cmd/agent
+## main.go
 
 エントリポイント。依存を組み立てて起動する。DI はここに直書きする。
 
@@ -287,9 +286,38 @@ localapi.Server.Start : HTTP待受
 ```text
 GET  /health       — 疎通確認
 GET  /info         — agent_id・バージョン・設定概要
-GET  /printers     — 利用可能なプリンター一覧
 POST /test-print   — テスト印刷
 ```
+
+---
+
+# Agent自動登録
+
+Agent は自分のIDを持たずに起動し、初回起動時に Backend へ自動登録してUUIDを取得する。
+
+## 起動フロー
+
+```
+setup.exe でインストール
+  ↓
+config.yaml を配置（agent.id は空）
+  ↓
+Windows サービスとして起動
+  ↓
+config の agent.id が空 → Backend POST /agents/register → UUID取得 → config.yaml に書き込み
+  ↓
+通常稼働開始（以降の再起動では agent.id が埋まっているのでスキップ）
+```
+
+## 登録リクエスト
+
+```
+POST /agents/register
+Request:  { mac: "AA:BB:CC:DD:EE:FF", hostname: "PC-01" }
+Response: { agent_id: "uuid-xxxx" }
+```
+
+同じMACアドレスで再登録が来た場合は既存のUUIDをそのまま返す（べき等）。
 
 ---
 
@@ -305,8 +333,7 @@ C:\ProgramData\PrintAgent\config.yaml
 
 ```yaml
 agent:
-  id: "ja-kochi-001"
-  name: "PrintAgent-Kochi-01"
+  id: ""  # 初回起動時に自動登録して書き込まれる
 
 backend:
   base_url: "http://backend.local:8000"
@@ -318,7 +345,6 @@ redis:
   db: 0
   stream_name: "print_jobs"
   consumer_group: "print_agent_group"
-  consumer_name: "ja-kochi-001"
 
 local_api:
   host: "127.0.0.1"
@@ -336,14 +362,21 @@ print:
   cleanup_on_startup: true
 ```
 
-## 必須項目
+## 必須項目（起動時バリデーション）
 
-* agent.id
 * backend.base_url
 * redis.addr / stream_name / consumer_group
 * storage.temp_dir / log_dir
 
-不足時は起動失敗とする。
+`agent.id` は空でも起動可（自動登録フローで補完される）。  
+上記が不足している場合は起動失敗とする。
+
+## インストール時に手動設定が必要な項目
+
+* backend.base_url — Backend サーバーのURL
+* redis.addr — Redis サーバーのアドレス
+
+これらはネットワーク環境依存のため自動化できない。インストーラのUIで入力させるか、社内共通値で固定する。
 
 ---
 
