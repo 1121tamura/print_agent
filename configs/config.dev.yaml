@@ -1,0 +1,21 @@
+agent:
+    id: f6e537f3-40a0-475c-bcbb-a29186a93bc9
+backend:
+    api_key: dev-api-key
+    base_url: http://host.docker.internal:8000
+    timeout_sec: 30
+local_api:
+    host: 127.0.0.1
+    port: 18181
+print:
+    cleanup_on_startup: true
+    delete_temp_after_print: true
+redis:
+    addr: host.docker.internal:16379
+    consumer_group: print_agent_group
+    db: 0
+    password: ""
+    stream_name: print_jobs
+storage:
+    log_dir: /tmp/print-agent/logs
+    temp_dir: /tmp/print-agent

@@ -1,10 +1,10 @@
 agent:
-  id: "ja-kochi-001"
-  name: "PrintAgent-Kochi-01"
+  id: ""  # 初回起動時に自動登録されて書き込まれる
 
 backend:
   base_url: "http://backend.local:8000"
   timeout_sec: 30
+  api_key: ""
 
 redis:
   addr: "redis.local:6379"
@@ -12,14 +12,10 @@ redis:
   db: 0
   stream_name: "print_jobs"
   consumer_group: "print_agent_group"
-  consumer_name: "ja-kochi-001"
 
 local_api:
   host: "127.0.0.1"
   port: 18181
-
-heartbeat:
-  interval_sec: 10
 
 storage:
   temp_dir: "C:\\ProgramData\\PrintAgent\\tmp"

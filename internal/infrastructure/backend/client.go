@@ -2,8 +2,10 @@ package backend
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -29,6 +31,19 @@ func NewClient(cfg *config.Config, logger *slog.Logger) *Client {
 		logger: logger,
 		http:   &http.Client{Timeout: timeout},
 	}
+}
+
+// newRequest は全リクエスト共通のヘッダーを付けた http.Request を生成する。
+func (c *Client) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, c.cfg.Backend.BaseURL+path, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if c.cfg.Backend.APIKey != "" {
+		req.Header.Set("X-API-Key", c.cfg.Backend.APIKey)
+	}
+	return req, nil
 }
 
 type registerRequest struct {
@@ -58,8 +73,12 @@ func (c *Client) Register() (string, error) {
 		return "", fmt.Errorf("marshal register request: %w", err)
 	}
 
-	url := c.cfg.Backend.BaseURL + "/agents/register"
-	resp, err := c.http.Post(url, "application/json", bytes.NewReader(body))
+	req, err := c.newRequest(context.Background(), http.MethodPost, "/agents/register", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("new request: %w", err)
+	}
+
+	resp, err := c.http.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("post /agents/register: %w", err)
 	}
@@ -88,8 +107,12 @@ type Job struct {
 
 // GetJob は Backend からジョブ詳細を取得する。
 func (c *Client) GetJob(jobID string) (*Job, error) {
-	url := fmt.Sprintf("%s/jobs/%s", c.cfg.Backend.BaseURL, jobID)
-	resp, err := c.http.Get(url)
+	req, err := c.newRequest(context.Background(), http.MethodGet, fmt.Sprintf("/jobs/%s", jobID), nil)
+	if err != nil {
+		return nil, fmt.Errorf("new request: %w", err)
+	}
+
+	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("get /jobs/%s: %w", jobID, err)
 	}
@@ -108,8 +131,12 @@ func (c *Client) GetJob(jobID string) (*Job, error) {
 
 // GetPDF は Backend から PDF バイナリを取得する。
 func (c *Client) GetPDF(jobID string) ([]byte, error) {
-	url := fmt.Sprintf("%s/jobs/%s/pdf", c.cfg.Backend.BaseURL, jobID)
-	resp, err := c.http.Get(url)
+	req, err := c.newRequest(context.Background(), http.MethodGet, fmt.Sprintf("/jobs/%s/pdf", jobID), nil)
+	if err != nil {
+		return nil, fmt.Errorf("new request: %w", err)
+	}
+
+	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("get /jobs/%s/pdf: %w", jobID, err)
 	}
@@ -126,52 +153,45 @@ func (c *Client) GetPDF(jobID string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-type resultRequest struct {
-	AgentID      string `json:"agent_id"`
+// AgentStatus はイベント通知で使用するステータス定数。
+const (
+	StatusOnline   = "online"
+	StatusPrinting = "printing"
+	StatusSuccess  = "success"
+	StatusError    = "error"
+)
+
+type statusRequest struct {
 	Status       string `json:"status"`
+	JobID        string `json:"job_id,omitempty"`
 	ErrorMessage string `json:"error_message,omitempty"`
 }
 
-// ReportResult は印刷結果を Backend に返却する。
-func (c *Client) ReportResult(jobID string, success bool, errMsg string) error {
-	status := "success"
-	if !success {
-		status = "error"
-	}
-
-	body, err := json.Marshal(resultRequest{
-		AgentID:      c.cfg.Agent.ID,
+// ReportStatus はイベント発生時に Backend へ状態を通知する。
+// 定期送信は行わず、起動・印刷開始・完了・失敗のタイミングで呼ぶ。
+func (c *Client) ReportStatus(status, jobID, errMsg string) error {
+	body, err := json.Marshal(statusRequest{
 		Status:       status,
+		JobID:        jobID,
 		ErrorMessage: errMsg,
 	})
 	if err != nil {
-		return fmt.Errorf("marshal result request: %w", err)
+		return fmt.Errorf("marshal status request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/jobs/%s/result", c.cfg.Backend.BaseURL, jobID)
-	resp, err := c.http.Post(url, "application/json", bytes.NewReader(body))
+	req, err := c.newRequest(context.Background(), http.MethodPost, fmt.Sprintf("/agents/%s/status", c.cfg.Agent.ID), bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("post /jobs/%s/result: %w", jobID, err)
+		return fmt.Errorf("new request: %w", err)
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("post /agents/%s/status: %w", c.cfg.Agent.ID, err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("report result failed: status %d", resp.StatusCode)
-	}
-	return nil
-}
-
-// SendHeartbeat は Backend にハートビートを送信する。
-func (c *Client) SendHeartbeat() error {
-	url := fmt.Sprintf("%s/agents/%s/heartbeat", c.cfg.Backend.BaseURL, c.cfg.Agent.ID)
-	resp, err := c.http.Post(url, "application/json", nil)
-	if err != nil {
-		return fmt.Errorf("post heartbeat: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("heartbeat failed: status %d", resp.StatusCode)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("report status failed: status %d", resp.StatusCode)
 	}
 	return nil
 }

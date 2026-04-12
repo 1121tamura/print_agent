@@ -87,8 +87,6 @@ local_api:
   host: "127.0.0.1"
   port: 18181
 
-heartbeat:
-  interval_sec: 10
 
 storage:
   temp_dir: "C:\\ProgramData\\PrintAgent\\tmp"
@@ -147,7 +145,58 @@ print-agent/
 
 ---
 
+## 実装状況
+
+### 完了
+
+| 機能 | ファイル |
+|---|---|
+| 設定読込・バリデーション | `internal/config/` |
+| Agent 自動登録（初回起動時） | `internal/infrastructure/backend/client.go` |
+| Local API `/health` `/info` | `internal/infrastructure/localapi/server.go` |
+| Redis Consumer（XREADGROUP） | `internal/infrastructure/redis/consumer.go` |
+| Job取得・PDF取得 | `internal/infrastructure/backend/client.go` |
+| 状態通知（online/printing/success/error） | `internal/infrastructure/backend/client.go` |
+| X-API-Key 認証（全リクエスト共通） | `internal/infrastructure/backend/client.go` |
+| 印刷ワーカー（Job受信→印刷→結果返却） | `internal/worker/processor.go` |
+
+### 残タスク（Windows環境が必要）
+
+#### 1. 印刷実行 `internal/infrastructure/printer/windows_printer.go`
+
+`GetDefaultPrinter()` と `Print()` の Windows API 実装。
+
+```go
+// GetDefaultPrinter: Windows API で通常使うプリンターを取得
+// Print: SumatraPDF などで PDF を印刷
+```
+
+参考: `golang.org/x/sys/windows` または `syscall` パッケージで `GetDefaultPrinter` を呼ぶ。
+
+#### 2. Windows サービス化 `internal/infrastructure/servicehost/`
+
+以下2ファイルを作成する。
+
+- `windows_service.go` — `golang.org/x/sys/windows/svc` を使用
+- `console_runner.go` — ローカルデバッグ用（シグナル待ち）
+
+`servicehost.Run(fn)` を呼ぶだけでサービス／コンソールを自動判別して切り替える。
+
+`main.go` の現在のシグナル待ち処理を `servicehost.Run()` に置き換える。
+
+#### 3. インストーラ `installer/`
+
+- `installer/inno/setup.iss` — Inno Setup スクリプト
+- `installer/scripts/install_service.ps1` — Windows サービス登録
+- `installer/scripts/uninstall_service.ps1` — サービス削除
+- `installer/scripts/post_install.ps1` — インストール後確認
+
+setup.exe が完了した時点で print-agent が Windows サービスとして起動済みであること。
+
+---
+
 ## ドキュメント
 
 - [docs/CLAUDE.md](docs/CLAUDE.md) — 設計方針・実装ガイド
+- [docs/sequence.md](docs/sequence.md) — 処理フロー シーケンス図
 - [docs/backend-considerations.md](docs/backend-considerations.md) — Backend 実装時の考慮事項

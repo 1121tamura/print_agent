@@ -7,7 +7,6 @@ type Config struct {
 	Backend  BackendConfig  `yaml:"backend"`
 	Redis    RedisConfig    `yaml:"redis"`
 	LocalAPI LocalAPIConfig `yaml:"local_api"`
-	Heartbeat HeartbeatConfig `yaml:"heartbeat"`
 	Storage  StorageConfig  `yaml:"storage"`
 	Print    PrintConfig    `yaml:"print"`
 }
@@ -20,6 +19,7 @@ type AgentConfig struct {
 type BackendConfig struct {
 	BaseURL    string `yaml:"base_url"`
 	TimeoutSec int    `yaml:"timeout_sec"`
+	APIKey     string `yaml:"api_key"`
 }
 
 type RedisConfig struct {
@@ -34,10 +34,6 @@ type RedisConfig struct {
 type LocalAPIConfig struct {
 	Host string `yaml:"host"`
 	Port int    `yaml:"port"`
-}
-
-type HeartbeatConfig struct {
-	IntervalSec int `yaml:"interval_sec"`
 }
 
 type StorageConfig struct {

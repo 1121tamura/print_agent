@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -12,7 +13,6 @@ import (
 )
 
 const (
-	blockDuration  = 5 * time.Second
 	retryBaseDelay = 2 * time.Second
 	retryMaxDelay  = 30 * time.Second
 )
@@ -48,12 +48,17 @@ func (c *Consumer) ensureGroup(ctx context.Context) error {
 }
 
 // Read は Redis Streams からジョブを1件受信して job_id を返す。
-// メッセージがない場合は blockDuration 待機してから空文字を返す。
-// 切断時はバックオフを挟んで再接続する。
+// block: 0（無限待機）でジョブが来た瞬間に即座に返す。
+// シャットダウン時は ctx がキャンセルされ、Close() で接続を閉じることで即座に終了する。
+// Redis 切断時はバックオフを挟んで再接続する。
 func (c *Consumer) Read(ctx context.Context) (jobID string, msgID string, err error) {
+	// Redis 切断時のリトライループ
 	delay := retryBaseDelay
 	for {
 		if err := c.ensureGroup(ctx); err != nil {
+			if ctx.Err() != nil {
+				return "", "", ctx.Err()
+			}
 			c.logger.Warn("redis ensure group failed, retrying", "err", err, "delay", delay)
 			if !sleep(ctx, delay) {
 				return "", "", ctx.Err()
@@ -61,7 +66,6 @@ func (c *Consumer) Read(ctx context.Context) (jobID string, msgID string, err er
 			delay = min(delay*2, retryMaxDelay)
 			continue
 		}
-		delay = retryBaseDelay
 		break
 	}
 
@@ -70,14 +74,14 @@ func (c *Consumer) Read(ctx context.Context) (jobID string, msgID string, err er
 		Consumer: c.cfg.Agent.ID,
 		Streams:  []string{c.streamKey(), ">"},
 		Count:    1,
-		Block:    blockDuration,
+		Block:    0, // 無限待機: ジョブが来た瞬間に即座に返す
 	}).Result()
 
-	if err == goredis.Nil {
-		// タイムアウト（メッセージなし）
-		return "", "", nil
-	}
 	if err != nil {
+		// Close() による強制終了 or ctx キャンセルは正常終了として扱う
+		if ctx.Err() != nil || errors.Is(err, goredis.ErrClosed) {
+			return "", "", ctx.Err()
+		}
 		return "", "", fmt.Errorf("xreadgroup: %w", err)
 	}
 
@@ -103,6 +107,7 @@ func (c *Consumer) Ack(ctx context.Context, msgID string) error {
 }
 
 // Close は Redis 接続を閉じる。
+// ctx キャンセル時に呼ぶことで、XREADGROUP の無限待機を即座に解除する。
 func (c *Consumer) Close() error {
 	return c.client.Close()
 }

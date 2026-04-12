@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"print-agent/internal/config"
 	"print-agent/internal/infrastructure/backend"
@@ -40,41 +39,10 @@ func (p *Processor) Start(ctx context.Context, wg *sync.WaitGroup) {
 		p.cleanupTempDir()
 	}
 
-	var iwg sync.WaitGroup
-	iwg.Add(2)
-	go p.runHeartbeat(ctx, &iwg)
-	go p.runJobLoop(ctx, &iwg)
-	iwg.Wait()
+	p.runJobLoop(ctx)
 }
 
-func (p *Processor) runHeartbeat(ctx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	interval := time.Duration(p.cfg.Heartbeat.IntervalSec) * time.Second
-	if interval == 0 {
-		interval = 10 * time.Second
-	}
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if err := p.backend.SendHeartbeat(); err != nil {
-				p.logger.Warn("heartbeat failed", "err", err)
-			} else {
-				p.logger.Debug("heartbeat sent")
-			}
-		}
-	}
-}
-
-func (p *Processor) runJobLoop(ctx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func (p *Processor) runJobLoop(ctx context.Context) {
 	for {
 		if ctx.Err() != nil {
 			return
@@ -96,28 +64,37 @@ func (p *Processor) runJobLoop(ctx context.Context, wg *sync.WaitGroup) {
 }
 
 func (p *Processor) processJob(ctx context.Context, jobID, msgID string) {
-	// ステップ2〜4: ジョブ詳細取得・PDF取得・temp保存
+	// ジョブ詳細取得・PDF取得・temp保存
 	tempPath, err := p.fetchAndSavePDF(jobID)
 	if err != nil {
 		p.logger.Error("fetch pdf failed", "job_id", jobID, "err", err)
-		p.reportAndAck(ctx, jobID, msgID, false, err.Error())
+		p.reportStatus(backend.StatusError, jobID, err.Error())
+		p.ack(ctx, jobID, msgID)
 		return
 	}
 
-	// ステップ5: 印刷
+	// 印刷開始通知（Backend への到達確認・タイムアウト判定のために必須）
+	p.reportStatus(backend.StatusPrinting, jobID, "")
+
+	// 印刷実行
 	printErr := p.printer.Print(tempPath)
 	if printErr != nil {
 		p.logger.Error("print failed", "job_id", jobID, "err", printErr)
+		p.reportStatus(backend.StatusError, jobID, printErr.Error())
+	} else {
+		p.logger.Info("print success", "job_id", jobID)
+		p.reportStatus(backend.StatusSuccess, jobID, "")
 	}
 
-	// ステップ6: 結果返却（成功・失敗どちらでも）
-	// ステップ7: temp削除
-	// ステップ8: ACK
-	p.reportAndAck(ctx, jobID, msgID, printErr == nil, errString(printErr))
-
-	if err := os.Remove(tempPath); err != nil && !os.IsNotExist(err) {
-		p.logger.Warn("temp file remove failed", "path", tempPath, "err", err)
+	// temp削除
+	if p.cfg.Print.DeleteTempAfterPrint {
+		if err := os.Remove(tempPath); err != nil && !os.IsNotExist(err) {
+			p.logger.Warn("temp file remove failed", "path", tempPath, "err", err)
+		}
 	}
+
+	// ACK
+	p.ack(ctx, jobID, msgID)
 }
 
 func (p *Processor) fetchAndSavePDF(jobID string) (string, error) {
@@ -143,11 +120,13 @@ func (p *Processor) fetchAndSavePDF(jobID string) (string, error) {
 	return tempPath, nil
 }
 
-func (p *Processor) reportAndAck(ctx context.Context, jobID, msgID string, success bool, errMsg string) {
-	if err := p.backend.ReportResult(jobID, success, errMsg); err != nil {
-		p.logger.Error("report result failed", "job_id", jobID, "err", err)
+func (p *Processor) reportStatus(status, jobID, errMsg string) {
+	if err := p.backend.ReportStatus(status, jobID, errMsg); err != nil {
+		p.logger.Error("report status failed", "status", status, "job_id", jobID, "err", err)
 	}
+}
 
+func (p *Processor) ack(ctx context.Context, jobID, msgID string) {
 	if err := p.consumer.Ack(ctx, msgID); err != nil {
 		p.logger.Error("ack failed", "job_id", jobID, "err", err)
 	}
@@ -172,11 +151,4 @@ func (p *Processor) cleanupTempDir() {
 			p.logger.Info("cleanup temp file", "path", path)
 		}
 	}
-}
-
-func errString(err error) string {
-	if err == nil {
-		return ""
-	}
-	return err.Error()
 }

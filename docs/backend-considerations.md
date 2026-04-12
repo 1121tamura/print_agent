@@ -76,15 +76,27 @@ POST /jobs/{job_id}/result
 
 ---
 
-## ハートビート
+## 状態通知API
 
 ```
-POST /agents/{agent_id}/heartbeat
+POST /agents/{agent_id}/status
 ```
 
-- Agent が定期送信（デフォルト10秒間隔）
+- Request: `{ status: string, job_id?: string, error_message?: string }`
 - Backend は `last_seen_at` を更新する
-- 一定時間ハートビートが来ない Agent をオフライン扱いにする仕組みを検討
+
+### 送信タイミング（Agent側）
+
+| status | タイミング | job_id |
+|---|---|---|
+| `online` | Agent 起動時 | なし |
+| `printing` | 印刷開始直前 | あり |
+| `success` | 印刷完了時 | あり |
+| `error` | 印刷失敗時 / PDF取得失敗時 | あり |
+
+- 定期送信（ハートビート）は行わない
+- `last_seen_at` は「最後に通知が来た時刻」として扱う
+- 一定時間 `online` / `printing` 以外の通知がなければオフライン扱いにする仕組みを検討
 
 ---
 

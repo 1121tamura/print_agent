@@ -350,9 +350,6 @@ local_api:
   host: "127.0.0.1"
   port: 18181
 
-heartbeat:
-  interval_sec: 10
-
 storage:
   temp_dir: "C:\\ProgramData\\PrintAgent\\tmp"
   log_dir:  "C:\\ProgramData\\PrintAgent\\logs"
@@ -390,7 +387,7 @@ print:
 * PDF取得
 * 印刷開始・完了
 * temp削除
-* ハートビート送信（DEBUG レベル）
+* 状態通知送信（online / printing / success / error）
 * エラー全般
 
 ---

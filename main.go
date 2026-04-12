@@ -42,6 +42,11 @@ func main() {
 		logger.Info("agent registered", "agent_id", id)
 	}
 
+	// 起動通知
+	if err := backendClient.ReportStatus(backend.StatusOnline, "", ""); err != nil {
+		logger.Warn("failed to report online status", "err", err)
+	}
+
 	prt := printer.NewWindowsPrinter(cfg, logger)
 	consumer := redis.NewConsumer(cfg, logger)
 
@@ -62,5 +67,6 @@ func main() {
 
 	logger.Info("shutting down")
 	cancel()
+	consumer.Close() // XREADGROUP の無限待機を即座に解除
 	wg.Wait()
 }
