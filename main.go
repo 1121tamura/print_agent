@@ -4,15 +4,14 @@ import (
 	"context"
 	"log/slog"
 	"os"
-	"os/signal"
 	"sync"
-	"syscall"
 
 	"print-agent/internal/config"
 	"print-agent/internal/infrastructure/backend"
 	"print-agent/internal/infrastructure/localapi"
 	"print-agent/internal/infrastructure/printer"
 	"print-agent/internal/infrastructure/redis"
+	"print-agent/internal/infrastructure/servicehost"
 	"print-agent/internal/worker"
 )
 
@@ -49,24 +48,18 @@ func main() {
 
 	prt := printer.NewWindowsPrinter(cfg, logger)
 	consumer := redis.NewConsumer(cfg, logger)
-
 	proc := worker.NewProcessor(cfg, logger, consumer, backendClient, prt)
 	server := localapi.NewServer(cfg, logger, prt)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// サービスモード／コンソールモードを自動判別して起動
+	servicehost.Run(logger, func(ctx context.Context) error {
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go proc.Start(ctx, &wg)
+		go server.Start(ctx, &wg)
+		wg.Wait()
 
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go proc.Start(ctx, &wg)
-	go server.Start(ctx, &wg)
-
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	logger.Info("shutting down")
-	cancel()
-	consumer.Close() // XREADGROUP の無限待機を即座に解除
-	wg.Wait()
+		consumer.Close() // XREADGROUP の無限待機を即座に解除
+		return nil
+	})
 }

@@ -52,6 +52,31 @@ Dev Container（VSCode）を使用。
 
 ---
 
+## Dev Container での起動
+
+印刷以外のフロー全体（ジョブ受信・PDF取得・状態通知・ACK）を確認できる。
+印刷は stub（何もしない）になるため、実際の印刷確認は Windows 実機が必要。
+
+```bash
+# 起動
+bash scripts/dev.sh start
+
+# 停止
+bash scripts/dev.sh stop
+
+# 再起動
+bash scripts/dev.sh restart
+
+# 状態確認（/health・/info を表示）
+bash scripts/dev.sh status
+```
+
+起動後は `http://127.0.0.1:18181` で Local API が使用可能。
+
+**初回起動時:** `config.dev.yaml` の `agent.id` が空の場合、Backend に自動登録して UUID を書き込む。2回目以降はスキップ。
+
+---
+
 ## ビルド
 
 Windows 向け実行ファイル（`print-agent.exe`）を Dev Container 内でクロスコンパイルする。
