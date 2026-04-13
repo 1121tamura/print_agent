@@ -20,3 +20,6 @@ GOOS=windows GOARCH=amd64 go build \
   .
 
 echo "Built: $OUTPUT_DIR/$BINARY_NAME"
+echo ""
+echo "Next: To build setup.exe, open installer/inno/setup.iss with Inno Setup on Windows."
+echo "      https://jrsoftware.org/isinfo.php"

@@ -77,15 +77,85 @@ bash scripts/dev.sh status
 
 ---
 
-## ビルド
+## ビルドとインストーラ作成
 
-Windows 向け実行ファイル（`print-agent.exe`）を Dev Container 内でクロスコンパイルする。
+### Step 1: print-agent.exe のビルド（Dev Container 内）
 
 ```bash
 bash scripts/build.sh
 ```
 
-`dist/print-agent.exe` が生成される。バージョンは git tag から自動取得。
+`dist/print-agent.exe` が生成される。
+
+---
+
+### Step 2: setup.exe の作成（Windows 上）
+
+`setup.exe` は Windows 上で **Inno Setup** を使って作成する。
+
+**1. Inno Setup をインストール**
+
+https://jrsoftware.org/isinfo.php からダウンロードしてインストール。
+
+**2. このリポジトリを Windows 上に配置**
+
+`dist/print-agent.exe`（Step 1 で生成）が以下の位置にあることを確認する。
+
+```
+print-agent/
+  ├── dist/
+  │   └── print-agent.exe   ← Step 1 で生成済み
+  └── installer/
+      ├── inno/
+      │   └── setup.iss     ← これを Inno Setup で開く
+      └── scripts/
+          ├── install_service.ps1
+          ├── uninstall_service.ps1
+          └── post_install.ps1
+```
+
+**3. Inno Setup で setup.iss を開いてコンパイル**
+
+```
+Inno Setup を起動
+  → File → Open → installer/inno/setup.iss
+  → Build → Compile（または F9）
+```
+
+**4. dist/setup.exe が生成される**
+
+---
+
+### Step 3: Windows 端末へのインストール
+
+`dist/setup.exe` を対象の Windows 端末で実行する（管理者権限が必要）。
+
+```
+setup.exe 実行
+  ↓
+print-agent.exe を C:\Program Files\PrintAgent\ に配置
+config.yaml を C:\ProgramData\PrintAgent\ に配置
+tmp/ logs/ ディレクトリを作成
+Windows サービスとして登録・起動
+  ↓
+インストール完了（サービスが Running 状態で起動済み）
+```
+
+インストール完了後、`config.yaml` の以下2項目を環境に合わせて編集する。
+
+```yaml
+backend:
+  base_url: "http://..."  # Backend サーバーの URL
+redis:
+  addr: "...:6379"        # Redis サーバーのアドレス
+```
+
+編集後はサービスを再起動する。
+
+```powershell
+sc.exe stop  PrintAgent
+sc.exe start PrintAgent
+```
 
 ---
 
