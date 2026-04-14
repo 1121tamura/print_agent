@@ -52,7 +52,14 @@ status() {
 case "$1" in
     start)   start ;;
     stop)    stop ;;
-    restart) stop; sleep 1; start ;;
+    restart)
+        stop
+        for i in $(seq 1 30); do
+            pgrep -f print-agent-bin > /dev/null 2>&1 || break
+            sleep 0.2
+        done
+        start
+        ;;
     status)  status ;;
     *)
         echo "Usage: bash scripts/dev.sh {start|stop|restart|status}"
