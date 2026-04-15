@@ -1,5 +1,5 @@
 agent:
-    id: f6e537f3-40a0-475c-bcbb-a29186a93bc9
+    id: 40a55da0-3d4d-40b2-be7a-1b97dc8de7bd
 backend:
     api_key: dev-api-key
     base_url: http://host.docker.internal:8000
@@ -11,7 +11,7 @@ print:
     cleanup_on_startup: true
     delete_temp_after_print: true
 redis:
-    addr: host.docker.internal:16379
+    addr: host.docker.internal:36379
     consumer_group: print_agent_group
     db: 0
     password: ""
