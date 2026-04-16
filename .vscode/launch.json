@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug print-agent",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "env": {
+        "PRINT_AGENT_CONFIG": "${workspaceFolder}/configs/config.dev.yaml"
+      }
+    }
+  ]
+}

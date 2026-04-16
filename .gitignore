@@ -14,7 +14,7 @@ installer/output/
 tmp/
 
 # IDE
-.vscode/
+# .vscode/
 .idea/
 
 # OS
