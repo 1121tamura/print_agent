@@ -1,0 +1,26 @@
+agent:
+  id: ""  # 初回起動時に自動登録されて書き込まれる
+
+backend:
+  base_url: "http://backend.local:8000"
+  timeout_sec: 30
+  api_key: ""
+
+redis:
+  addr: "redis.local:6379"
+  password: ""
+  db: 0
+  stream_name: "print_jobs"
+  consumer_group: "print_agent_group"
+
+local_api:
+  host: "127.0.0.1"
+  port: 18181
+
+storage:
+  temp_dir: "C:\\ProgramData\\PrintAgent\\tmp"
+  log_dir:  "C:\\ProgramData\\PrintAgent\\logs"
+
+print:
+  delete_temp_after_print: true
+  cleanup_on_startup: true
